@@ -3,7 +3,7 @@ import random
 import re
 import time
 from datetime import datetime
-
+from openpyxl.styles import Font, Alignment
 import pandas as pd
 import requests
 from bs4 import BeautifulSoup
@@ -127,10 +127,43 @@ def save_excel(jobs, keywords):
     name = re.sub(r"[^\w-]", "", "_".join(keywords))
     filename = f"jobs_{name}_{datetime.now():%Y-%m-%d_%H%M}.xlsx"
 
-    df = pd.DataFrame(jobs, columns=["title", "company", "location", "link", "description"])
+    df = pd.DataFrame(jobs, columns=["title", "link", "company", "location", "description"])
     # Excel cells max out at 32767 chars
     df["description"] = df["description"].str.slice(0, 32000)
-    df.to_excel(filename, index=False)
+
+    with pd.ExcelWriter(filename, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name="Jobs")
+        ws = writer.sheets["Jobs"]
+
+        # column widths (A title, B link, C company, D location, E description)
+        widths = {"A": 45, "B": 16, "C": 28, "D": 22, "E": 80}
+        for col, width in widths.items():
+            ws.column_dimensions[col].width = width
+
+        # header style
+        for cell in ws[1]:
+            cell.font = Font(bold=True)
+            cell.alignment = Alignment(vertical="center")
+        ws.row_dimensions[1].height = 25
+
+        # rows: taller, clickable links
+        link_font = Font(color="0563C1", underline="single")
+        for row in range(2, ws.max_row + 1):
+            ws.row_dimensions[row].height = 30
+
+            link_cell = ws.cell(row=row, column=2)
+            url = link_cell.value
+            if url:
+                link_cell.hyperlink = url
+                link_cell.value = "Open job"
+                link_cell.font = link_font
+
+            for col in (1, 3, 4, 5):
+                ws.cell(row=row, column=col).alignment = Alignment(vertical="center")
+
+        ws.freeze_panes = "A2"
+        ws.auto_filter.ref = ws.dimensions
+
     print(f"saved {len(df)} jobs -> {filename}")
 
 
